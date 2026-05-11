@@ -1014,7 +1014,7 @@ function parsearPrendas(texto){
   return {prendas,noRec};
 }
 
-function toggleVoz(){
+async function toggleVoz(){
   if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){
     vozStatus('err','⚠️ Tu navegador no soporta reconocimiento de voz. Usá Chrome o Edge actualizado.');
     return;
