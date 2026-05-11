@@ -1,5 +1,5 @@
 // Service Worker para Yokavil — permite uso offline
-const CACHE_NAME = 'yokavil-v1';
+const CACHE_NAME = 'yokavil-v2';
 const CACHE_FILES = [
   './',
   './index.html',
@@ -8,7 +8,8 @@ const CACHE_FILES = [
   './icon-512.png',
   'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Quattrocento+Sans:wght@400;700&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 ];
 
 self.addEventListener('install', (e) => {
