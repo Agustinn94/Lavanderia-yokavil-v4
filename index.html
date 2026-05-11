@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&family=Quattrocento+Sans:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--az:#0f4c75;--azm:#1b6ca8;--azc:#e8f4fd;--ac:#f39c12;--acc:#fef9ec;--ro:#e74c3c;--roc:#fdf0ef;--ve:#27ae60;--vec:#eafaf1;--go:#2c3e50;--gm:#7f8c8d;--gc:#ecf0f1;--brd:#dde1e7;--bl:#fff;--fo:#f5f7fa;--sh:0 2px 12px rgba(15,76,117,.10);--r:14px;--rch:8px;--fn:'DM Sans',sans-serif;--mo:'DM Mono',monospace}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -384,6 +385,22 @@ select.fc{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
     </div>
   </div>
   <div class="card">
+    <div class="ct"><div class="ci">📱</div>Compartir / Instalar app</div>
+    <p class="mu" style="margin-bottom:9px">Mostrá este código QR para que otros instalen la app en su celular. Funciona escaneando con la cámara.</p>
+    <div id="qr-container" style="background:#fff;padding:12px;border-radius:var(--rch);display:flex;justify-content:center;border:1.5px solid var(--brd);margin-bottom:10px"></div>
+    <div style="font-family:var(--mo);font-size:11px;color:var(--gm);text-align:center;padding:7px;background:var(--fo);border-radius:6px;word-break:break-all" id="qr-url"></div>
+    <div style="display:flex;gap:7px;margin-top:9px">
+      <button class="btn btnS" style="flex:1" onclick="copiarUrl()">📋 Copiar link</button>
+      <button class="btn btnP" style="flex:1" onclick="compartirApp()">📤 Compartir</button>
+    </div>
+    <p class="mu" style="margin-top:11px;font-size:11px;line-height:1.6">
+      <strong style="color:var(--az)">Para instalar como app:</strong><br>
+      <strong>Android:</strong> Chrome → menú ⋮ → "Instalar app" o "Agregar a pantalla principal"<br>
+      <strong>iPhone:</strong> Safari → compartir ⬆️ → "Agregar a pantalla de inicio"
+    </p>
+  </div>
+
+  <div class="card">
     <div class="ct"><div class="ci">🗄️</div>Datos</div>
     <div class="cfgr"><div><div class="cfgl">Exportar reporte completo</div><div class="cfgs">Descarga historial en PDF</div></div><button class="btn btnS" onclick="exportReporte()">📥 PDF</button></div>
     <div class="cfgr"><div><div class="cfgl">Borrar historial</div><div class="cfgs">Elimina todos los registros</div></div><button class="btn btnD" onclick="borrarHist()">🗑️ Borrar</button></div>
@@ -488,7 +505,7 @@ function tab(id){
   if(id==='hist')renderHist();
   if(id==='dash')renderDash();
   if(id==='ops')renderOps();
-  if(id==='cfg'){renderCfgP();loadCfgUI();}
+  if(id==='cfg'){renderCfgP();loadCfgUI();setTimeout(generarQR,100);}
 }
 
 /* ── PRENDAS GRID ── */
@@ -534,7 +551,7 @@ function agregarPrendaLibre(){
   if(!nom){toast('⚠️ Escribí el nombre de la prenda','err');return;}
   if(guardar){
     if(!PRENDAS.find(p=>p.toLowerCase()===nom.toLowerCase())){
-      PRENDAS.push(nom);save();renderPGrid();
+      PRENDAS.push(nom);save();renderPGrid();invalidarMapaVoz();
       setTimeout(()=>{const i=PRENDAS.length-1;const inp=document.getElementById('cant-'+i);if(inp){inp.value=cant;actAct(i);}},60);
     }
   } else {
@@ -743,127 +760,261 @@ function guardarHist(){
 }
 
 /* ── VOZ (PARSER ROBUSTO) ── */
-// Mapa completo nombre→canónico. Claves en minúsculas sin tilde para comparar
+// ════════════════════════════════════════════════════════════════
+// PARSER DE VOZ ROBUSTO — soporta acento argentino, errores de
+// transcripción del navegador, números en palabras, sinónimos.
+// ════════════════════════════════════════════════════════════════
+
+// Diccionario amplio con MUCHAS variantes de transcripción
 const MAPA_VOZ={
+  // Pantalón de trabajo
   'pantalon de trabajo':'Pantalón de trabajo','pantalones de trabajo':'Pantalón de trabajo',
-  'camisa de trabajo':'Camisa de trabajo','camisas de trabajo':'Camisa de trabajo',
-  'camisa':'Camisa de trabajo','camisas':'Camisa de trabajo',
-  'chaleco sflex':'Chaleco Sflex',
-  'buzo polar':'Buzo polar','buzos polares':'Buzo polar',
-  'buzo':'Buzo','buzos':'Buzo',
-  'campera polar':'Campera polar','camperas polares':'Campera polar',
-  'campera':'Campera','camperas':'Campera',
-  'chaqueta':'Chaqueta','chaquetas':'Chaqueta',
-  'remera':'Remera','remeras':'Remera',
-  'short':'Short','shorts':'Short',
-  'medias':'Medias','media':'Medias',
-  'calzas':'Calzas','calza':'Calzas',
-  'camiseta termica':'Camiseta térmica','camiseta termica':'Camiseta térmica',
-  'camisetas termicas':'Camiseta térmica','camiseta':'Camiseta térmica',
-  'pantalon termico':'Pantalón térmico','pantalones termicos':'Pantalón térmico',
-  'pantalon escopeta':'Pantalón escopeta','pantalones escopeta':'Pantalón escopeta',
-  'mameluco termico':'Mameluco térmico','mamelucos termicos':'Mameluco térmico',
-  'mameluco de trabajo':'Mameluco de trabajo','mamelucos de trabajo':'Mameluco de trabajo',
-  'mameluco':'Mameluco de trabajo','mamelucos':'Mameluco de trabajo',
-  'toalla de mano':'Toalla de mano','toallas de mano':'Toalla de mano',
-  'toallon':'Toallón','toallones':'Toallón',
-  'boxer':'Boxer','boxers':'Boxer',
-  'cojo':'Cojo','cojos':'Cojo',
+  'pantalon trabajo':'Pantalón de trabajo','pantalones trabajo':'Pantalón de trabajo',
   'pantalon':'Pantalón de trabajo','pantalones':'Pantalón de trabajo',
-  'cubre nuca':'Cubre nuca','cubre nucas':'Cubre nuca',
-  'jogging':'Jogging','joggings':'Jogging',
-  'gorro':'Gorro','gorros':'Gorro',
+  'pantalonsito':'Pantalón de trabajo',
+  // Camisa de trabajo
+  'camisa de trabajo':'Camisa de trabajo','camisas de trabajo':'Camisa de trabajo',
+  'camisa trabajo':'Camisa de trabajo','camisas trabajo':'Camisa de trabajo',
+  'camisa':'Camisa de trabajo','camisas':'Camisa de trabajo',
+  // Chaleco Sflex
+  'chaleco sflex':'Chaleco Sflex','chalecos sflex':'Chaleco Sflex',
+  'chaleco s flex':'Chaleco Sflex','chaleco esflex':'Chaleco Sflex',
+  'chaleco esfle':'Chaleco Sflex','chaleco esflé':'Chaleco Sflex',
+  'chaleco sfle':'Chaleco Sflex',
+  // Chaleco reflectivo / seguridad
   'chaleco reflectivo':'Chaleco reflectivo','chalecos reflectivos':'Chaleco reflectivo',
+  'chaleco reflectivos':'Chaleco reflectivo','chaleco reflejante':'Chaleco reflectivo',
+  'chaleco refractivo':'Chaleco reflectivo','chaleco reflexivo':'Chaleco reflectivo',
   'chaleco de seguridad':'Chaleco de seguridad','chalecos de seguridad':'Chaleco de seguridad',
+  'chaleco seguridad':'Chaleco de seguridad','chalecos seguridad':'Chaleco de seguridad',
+  // Chaleco solo → Sflex por defecto
   'chaleco':'Chaleco Sflex','chalecos':'Chaleco Sflex',
+  // Buzo polar / Buzo
+  'buzo polar':'Buzo polar','buzos polares':'Buzo polar','buso polar':'Buzo polar','busos polares':'Buzo polar',
+  'buzo':'Buzo','buzos':'Buzo','buso':'Buzo','busos':'Buzo',
+  // Campera polar / Campera
+  'campera polar':'Campera polar','camperas polares':'Campera polar',
+  'campera de polar':'Campera polar',
+  'campera':'Campera','camperas':'Campera',
+  // Chaqueta
+  'chaqueta':'Chaqueta','chaquetas':'Chaqueta',
+  // Remera
+  'remera':'Remera','remeras':'Remera',
+  // Short
+  'short':'Short','shorts':'Short','chor':'Short','chores':'Short',
+  // Medias
+  'media':'Medias','medias':'Medias','par de medias':'Medias','pares de medias':'Medias',
+  // Calzas
+  'calza':'Calzas','calzas':'Calzas',
+  // Camiseta térmica
+  'camiseta termica':'Camiseta térmica','camiseta térmica':'Camiseta térmica',
+  'camisetas termicas':'Camiseta térmica','camisetas térmicas':'Camiseta térmica',
+  'camiseta':'Camiseta térmica','camisetas':'Camiseta térmica',
+  // Pantalón térmico
+  'pantalon termico':'Pantalón térmico','pantalón térmico':'Pantalón térmico',
+  'pantalones termicos':'Pantalón térmico','pantalones térmicos':'Pantalón térmico',
+  // Pantalón escopeta
+  'pantalon escopeta':'Pantalón escopeta','pantalones escopeta':'Pantalón escopeta',
+  'pantalón escopeta':'Pantalón escopeta','escopeta':'Pantalón escopeta',
+  // Mameluco térmico / de trabajo / solo
+  'mameluco termico':'Mameluco térmico','mameluco térmico':'Mameluco térmico',
+  'mamelucos termicos':'Mameluco térmico','mamelucos térmicos':'Mameluco térmico',
+  'mameluco de trabajo':'Mameluco de trabajo','mamelucos de trabajo':'Mameluco de trabajo',
+  'mameluco trabajo':'Mameluco de trabajo','mamelucos trabajo':'Mameluco de trabajo',
+  'mameluco':'Mameluco de trabajo','mamelucos':'Mameluco de trabajo',
+  // Toalla / Toallón
+  'toalla de mano':'Toalla de mano','toallas de mano':'Toalla de mano',
+  'toalla mano':'Toalla de mano','toallas mano':'Toalla de mano',
+  'toalla':'Toalla de mano','toallas':'Toalla de mano',
+  'toallon':'Toallón','toallón':'Toallón','toallones':'Toallón','toallónes':'Toallón',
+  // Boxer
+  'boxer':'Boxer','boxers':'Boxer','boxeres':'Boxer','bóxer':'Boxer','bóxers':'Boxer',
+  // Cojo
+  'cojo':'Cojo','cojos':'Cojo',
+  // Cubre nuca
+  'cubre nuca':'Cubre nuca','cubre nucas':'Cubre nuca',
+  'cubrenuca':'Cubre nuca','cubrenucas':'Cubre nuca',
+  'cubrenuca':'Cubre nuca','cubrenukas':'Cubre nuca','cubre nuka':'Cubre nuca',
+  // Jogging
+  'jogging':'Jogging','joggings':'Jogging','yoguin':'Jogging','yoging':'Jogging',
+  'pantalon jogging':'Jogging','pantalones jogging':'Jogging',
+  // Gorro
+  'gorro':'Gorro','gorros':'Gorro','gorrito':'Gorro','gorritos':'Gorro',
 };
-// Números en palabras
-const NUMS={'cero':0,'un':1,'uno':1,'una':1,'dos':2,'tres':3,'cuatro':4,'cinco':5,'seis':6,'siete':7,'ocho':8,'nueve':9,'diez':10,'once':11,'doce':12,'trece':13,'catorce':14,'quince':15,'dieciséis':16,'dieciseis':16,'diecisiete':17,'dieciocho':18,'diecinueve':19,'veinte':20,'veintiuno':21,'veintidos':22,'veintidos':22,'veintitrés':23,'veintitres':23};
+
+// Lista de prendas pre-normalizada (clave→canónica, longitud descendente)
+let MAPA_VOZ_KEYS=null;
+function getMapaVozKeys(){
+  if(!MAPA_VOZ_KEYS){
+    // Incluir también prendas custom del PRENDAS array que no estén ya
+    const extras={};
+    PRENDAS.forEach(p=>{
+      const k=normalizarTexto(p);
+      if(!Object.keys(MAPA_VOZ).find(mk=>normalizarTexto(mk)===k)) extras[k]=p;
+    });
+    const all={...MAPA_VOZ,...extras};
+    MAPA_VOZ_KEYS=Object.entries(all)
+      .map(([k,v])=>({k:normalizarTexto(k),v,len:k.split(/\s+/).length}))
+      .sort((a,b)=>b.len-a.len||b.k.length-a.k.length);
+  }
+  return MAPA_VOZ_KEYS;
+}
+// Invalidar cuando se agregue una prenda
+function invalidarMapaVoz(){MAPA_VOZ_KEYS=null;}
+
+// Números en palabras — completo hasta 999
+const NUMS_PALABRA={
+  'cero':0,'un':1,'uno':1,'una':1,'dos':2,'tres':3,'cuatro':4,'cinco':5,
+  'seis':6,'siete':7,'ocho':8,'nueve':9,'diez':10,'once':11,'doce':12,
+  'trece':13,'catorce':14,'quince':15,'dieciseis':16,'dieciséis':16,
+  'diecisiete':17,'dieciocho':18,'diecinueve':19,'veinte':20,
+  'veintiuno':21,'veintiun':21,'veintidos':22,'veintidós':22,'veintitres':23,'veintitrés':23,
+  'veinticuatro':24,'veinticinco':25,'veintiseis':26,'veintiséis':26,
+  'veintisiete':27,'veintiocho':28,'veintinueve':29,
+  'treinta':30,'cuarenta':40,'cincuenta':50,'sesenta':60,'setenta':70,'ochenta':80,'noventa':90,
+  'cien':100,'ciento':100,'doscientos':200,'trescientos':300,'cuatrocientos':400,
+  'quinientos':500,'seiscientos':600,'setecientos':700,'ochocientos':800,'novecientos':900
+};
+
+// Convertir secuencia de palabras a número (ej: "veintitres" = 23, "treinta y cinco" = 35)
+function leerNumero(palabras, idx){
+  // Intentar dígito puro
+  const digit=parseInt(palabras[idx]);
+  if(!isNaN(digit)&&digit>=0&&digit<10000) return {cant:digit,avanzar:1};
+  
+  const w1=normalizarTexto(palabras[idx]||'');
+  if(NUMS_PALABRA[w1]===undefined) return {cant:1,avanzar:0};
+  
+  let cant=NUMS_PALABRA[w1];
+  let avanzar=1;
+  
+  // "treinta y cinco" — buscar "y" + número
+  if(cant>=20&&cant<=90&&cant%10===0){
+    const w2=normalizarTexto(palabras[idx+1]||'');
+    const w3=normalizarTexto(palabras[idx+2]||'');
+    if(w2==='y'&&NUMS_PALABRA[w3]!==undefined&&NUMS_PALABRA[w3]<10){
+      cant+=NUMS_PALABRA[w3];
+      avanzar=3;
+    }
+  }
+  // "cien" → revisar si sigue número (ciento veinte, ciento treinta y cinco)
+  if(cant===100){
+    const w2=normalizarTexto(palabras[idx+1]||'');
+    if(NUMS_PALABRA[w2]!==undefined&&NUMS_PALABRA[w2]<100){
+      cant+=NUMS_PALABRA[w2];
+      avanzar=2;
+      // y luego "y X"
+      const w3=normalizarTexto(palabras[idx+2]||'');
+      const w4=normalizarTexto(palabras[idx+3]||'');
+      if(w3==='y'&&NUMS_PALABRA[w4]!==undefined&&NUMS_PALABRA[w4]<10){
+        cant+=NUMS_PALABRA[w4];
+        avanzar=4;
+      }
+    }
+  }
+  // "doscientos / trescientos" + resto
+  if(cant>=200&&cant<=900&&cant%100===0){
+    const w2=normalizarTexto(palabras[idx+1]||'');
+    if(NUMS_PALABRA[w2]!==undefined&&NUMS_PALABRA[w2]<100){
+      cant+=NUMS_PALABRA[w2];
+      avanzar=2;
+      const w3=normalizarTexto(palabras[idx+2]||'');
+      const w4=normalizarTexto(palabras[idx+3]||'');
+      if(w3==='y'&&NUMS_PALABRA[w4]!==undefined&&NUMS_PALABRA[w4]<10){
+        cant+=NUMS_PALABRA[w4];
+        avanzar=4;
+      }
+    }
+  }
+  return {cant,avanzar};
+}
 
 function normalizarTexto(t){
-  return t.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // quitar tildes para comparar
+  if(!t) return '';
+  return String(t).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[^\w\s]/g,' ').replace(/\s+/g,' ').trim();
 }
 
-function buscarPrenda(np){
-  // 1) coincidencia exacta sin tilde
-  const n=normalizarTexto(np);
-  for(const[k,v] of Object.entries(MAPA_VOZ)){
-    if(normalizarTexto(k)===n) return v;
+// Buscar la mejor coincidencia de prenda en un fragmento de palabras
+// Devuelve {prenda, palabras_consumidas} o null
+function buscarPrendaEnFragmento(palabras, idx){
+  const keys=getMapaVozKeys();
+  // Probar combinaciones de 4, 3, 2, 1 palabras desde idx
+  for(let n=Math.min(4,palabras.length-idx);n>=1;n--){
+    const frag=palabras.slice(idx,idx+n).map(normalizarTexto).join(' ');
+    if(!frag) continue;
+    // Coincidencia exacta primero
+    for(const{k,v} of keys){
+      if(k===frag) return {prenda:v,consumidas:n};
+    }
   }
-  // 2) el texto normalizado incluye la clave
-  for(const[k,v] of Object.entries(MAPA_VOZ)){
-    if(n.includes(normalizarTexto(k))&&normalizarTexto(k).length>3) return v;
-  }
-  // 3) la clave incluye el texto
-  for(const[k,v] of Object.entries(MAPA_VOZ)){
-    if(normalizarTexto(k).includes(n)&&n.length>3) return v;
+  // Coincidencia parcial (incluye) sólo para fragmentos de 1-2 palabras
+  for(let n=Math.min(2,palabras.length-idx);n>=1;n--){
+    const frag=palabras.slice(idx,idx+n).map(normalizarTexto).join(' ');
+    if(!frag||frag.length<4) continue;
+    for(const{k,v} of keys){
+      if(k.length>=4&&(k===frag||k.startsWith(frag+' ')||frag.startsWith(k+' '))){
+        return {prenda:v,consumidas:n};
+      }
+    }
   }
   return null;
 }
 
-function extraerNumero(palabras, idx){
-  // intentar número dígito
-  const n=parseInt(palabras[idx]);
-  if(!isNaN(n)&&n>0) return {cant:n,avanzar:1};
-  // intentar número en palabras
-  const w=palabras[idx]?.toLowerCase();
-  if(w&&NUMS[w]!==undefined) return {cant:NUMS[w],avanzar:1};
-  return {cant:1,avanzar:0};
-}
-
+// Parser principal de prendas
 function parsearPrendas(texto){
-  // Normalizar texto para el parser
-  const tl=texto.toLowerCase().replace(/,/g,' , ').replace(/\s+/g,' ').trim();
-  const words=tl.split(' ');
+  const tl=texto.toLowerCase()
+    .replace(/[,\.;:]/g,' , ')
+    .replace(/\s+/g,' ').trim();
+  // Tokenizar respetando comas
+  const words=tl.split(' ').filter(w=>w.length>0);
   const prendas=[];
   const noRec=[];
 
-  // Buscar segmentos de cantidad + prenda
-  // Estrategia: ventana deslizante de 1-4 palabras buscando prendas conocidas
   let i=0;
   while(i<words.length){
     const w=words[i];
-    // Saltar separadores y palabras vacías
-    if(w===','||w==='y'||w==='e'||w.length===0){i++;continue;}
-    // Intentar leer número
-    const {cant,avanzar}=extraerNumero(words,i);
-    const startPrenda=i+avanzar;
-    // Intentar ventanas de 1 a 4 palabras para identificar prenda
-    let encontrado=false;
-    for(let largo=4;largo>=1;largo--){
-      const frag=words.slice(startPrenda,startPrenda+largo).join(' ');
-      const pf=buscarPrenda(frag);
-      if(pf){
-        const ex=prendas.find(p=>p.prenda===pf);
-        if(ex) ex.cantidad+=cant;
-        else prendas.push({prenda:pf,cantidad:cant,libre:false});
-        i=startPrenda+largo;
-        encontrado=true;
-        break;
-      }
+    // Saltar separadores
+    if(w===','||w==='y'||w==='e'||w==='o'||w==='mas'||w==='más'||w==='también'||w==='tambien'){
+      i++;continue;
     }
-    if(!encontrado){
-      // Si había número explícito y sigue texto desconocido, capturarlo
-      if(avanzar>0&&startPrenda<words.length&&words[startPrenda]!==','&&words[startPrenda]!=='y'){
-        // Capturar hasta el próximo número o coma
-        let j=startPrenda;
-        while(j<words.length&&words[j]!==','&&words[j]!=='y'&&isNaN(parseInt(words[j]))&&!NUMS[words[j]]){j++;}
-        const fragsconocido=words.slice(startPrenda,j).join(' ').trim();
-        if(fragsconocido.length>2){
-          noRec.push({textoOriginal:fragsconocido,cantidad:cant,nombreEditado:capitalizar(fragsconocido)});
-        }
-        i=j;
-      } else {
-        i++;
+    // Intentar leer un número
+    const {cant,avanzar}=leerNumero(words,i);
+    const tieneNumero=avanzar>0;
+    const startPrenda=tieneNumero?i+avanzar:i;
+    
+    // Buscar prenda en las siguientes 1-4 palabras
+    const match=buscarPrendaEnFragmento(words,startPrenda);
+    
+    if(match){
+      const ex=prendas.find(p=>p.prenda===match.prenda);
+      if(ex) ex.cantidad+=cant;
+      else prendas.push({prenda:match.prenda,cantidad:cant,libre:false});
+      i=startPrenda+match.consumidas;
+    } else if(tieneNumero){
+      // Tenía número pero no se reconoce la prenda → capturar como no reconocida
+      let j=startPrenda;
+      const stop=[',','y','e','o','mas','más'];
+      while(j<words.length&&!stop.includes(words[j])){
+        // Detenerse si aparece otro número
+        const test=leerNumero(words,j);
+        if(test.avanzar>0&&j>startPrenda) break;
+        j++;
       }
+      const frag=words.slice(startPrenda,j).join(' ').trim();
+      if(frag.length>2){
+        noRec.push({textoOriginal:frag,cantidad:cant,nombreEditado:capitalizar(frag)});
+      }
+      i=j;
+    } else {
+      i++;
     }
   }
   return {prendas,noRec};
 }
 
-async function toggleVoz(){
+function toggleVoz(){
   if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){
     vozStatus('err','⚠️ Tu navegador no soporta reconocimiento de voz. Usá Chrome o Edge actualizado.');
     return;
@@ -1063,7 +1214,7 @@ function aplicarVoz(){
       const cant=parseInt(document.getElementById('voznr-cant-'+i)?.value)||nr.cantidad;
       const guardar=document.getElementById('voznr-g-'+i)?.checked;
       if(nom&&cant>0){
-        if(guardar&&!PRENDAS.find(p=>p.toLowerCase()===nom.toLowerCase())){PRENDAS.push(nom);save();}
+        if(guardar&&!PRENDAS.find(p=>p.toLowerCase()===nom.toLowerCase())){PRENDAS.push(nom);save();invalidarMapaVoz();}
         vozRes.prendas.push({prenda:nom,cantidad:cant,libre:!guardar});
       }
     });
@@ -1411,9 +1562,9 @@ function addPrendaCfg(){
   const inp=document.getElementById('cfg-np'),val=inp.value.trim();
   if(!val)return;
   if(PRENDAS.find(p=>p.toLowerCase()===val.toLowerCase())){toast('Ya existe esa prenda','err');return;}
-  PRENDAS.push(val);save();inp.value='';renderCfgP();renderPGrid();toast('Prenda agregada: '+val,'ok');
+  PRENDAS.push(val);save();inp.value='';renderCfgP();renderPGrid();invalidarMapaVoz();toast('Prenda agregada: '+val,'ok');
 }
-function elimPrendaCfg(i){PRENDAS.splice(i,1);save();renderCfgP();renderPGrid();toast('Prenda eliminada');}
+function elimPrendaCfg(i){PRENDAS.splice(i,1);save();renderCfgP();renderPGrid();invalidarMapaVoz();toast('Prenda eliminada');}
 function borrarHist(){if(!confirm('¿Borrar TODO el historial?'))return;hist=[];save();renderHist();renderDash();toast('Historial eliminado','err');}
 
 /* ── MODALS ── */
@@ -1428,6 +1579,54 @@ function toast(msg,tipo=''){
   const t=document.getElementById('toast');
   t.textContent=msg;t.className='toast vis '+tipo;
   clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('vis'),2900);
+}
+
+
+/* ── COMPARTIR / QR ── */
+let qrGenerado=false;
+function generarQR(){
+  if(qrGenerado) return;
+  const url=window.location.href.split('?')[0].split('#')[0];
+  document.getElementById('qr-url').textContent=url;
+  const cont=document.getElementById('qr-container');
+  cont.innerHTML='';
+  try{
+    new QRCode(cont,{
+      text:url,width:200,height:200,
+      colorDark:'#0f4c75',colorLight:'#ffffff',
+      correctLevel:QRCode.CorrectLevel.H
+    });
+    qrGenerado=true;
+  }catch(e){
+    cont.innerHTML='<p class="mu tc">No se pudo generar el QR — la URL es:<br><strong>'+url+'</strong></p>';
+  }
+}
+function copiarUrl(){
+  const url=window.location.href.split('?')[0].split('#')[0];
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(()=>toast('✅ Link copiado','ok'));
+  }else{
+    // Fallback
+    const ta=document.createElement('textarea');
+    ta.value=url;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');toast('✅ Link copiado','ok');}
+    catch(e){toast('Copialo manualmente: '+url);}
+    ta.remove();
+  }
+}
+async function compartirApp(){
+  const url=window.location.href.split('?')[0].split('#')[0];
+  if(navigator.share){
+    try{
+      await navigator.share({
+        title:'Yokavil — Lavandería Industrial',
+        text:'App de gestión de remitos de Lavandería Yokavil. Abrí este link para empezar a usarla:',
+        url:url
+      });
+    }catch(e){}
+  }else{
+    copiarUrl();
+  }
 }
 
 /* ── SERVICE WORKER (offline + actualizaciones automáticas) ── */
