@@ -1,5 +1,5 @@
 // Service Worker para Yokavil — permite uso offline
-const CACHE_NAME = 'yokavil-v2';
+const CACHE_NAME = 'yokavil-v3';
 const CACHE_FILES = [
   './',
   './index.html',
