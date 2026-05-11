@@ -175,6 +175,18 @@ select.fc{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
     <button class="nb" onclick="tab('cfg')" id="tab-cfg"><span class="i">⚙️</span>Config</button>
   </div>
 </header>
+<!-- Banner de instalación: aparece sólo si la app es instalable y no está instalada aún -->
+<div id="installBanner" style="display:none;background:linear-gradient(135deg,#0f4c75,#1b6ca8);color:#fff;padding:11px 14px;display:none;align-items:center;gap:11px;box-shadow:0 2px 12px rgba(15,76,117,.2);position:sticky;top:0;z-index:99;animation:slideIn .3s ease">
+  <div style="font-size:24px">📲</div>
+  <div style="flex:1;line-height:1.3">
+    <div style="font-weight:700;font-size:13.5px">Instalar Yokavil como app</div>
+    <div style="font-size:11px;opacity:.85">Acceso rápido desde la pantalla principal</div>
+  </div>
+  <button onclick="instalarApp()" style="background:#f39c12;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-family:var(--fn);font-size:13px;font-weight:700;cursor:pointer">Instalar</button>
+  <button onclick="cerrarBannerInstall()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;padding:0">×</button>
+</div>
+<style>@keyframes slideIn{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}</style>
+
 <div class="main">
 
 <!-- NUEVO -->
@@ -386,6 +398,14 @@ select.fc{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   </div>
   <div class="card">
     <div class="ct"><div class="ci">📱</div>Compartir / Instalar app</div>
+    <!-- Botón de instalación directa (sólo visible si el navegador lo soporta) -->
+    <button id="btnInstalarConfig" onclick="instalarApp()" style="display:none;background:linear-gradient(135deg,#0f4c75,#1b6ca8);color:#fff;border:none;border-radius:var(--r);padding:14px;font-family:var(--fn);font-size:14px;font-weight:700;cursor:pointer;width:100%;margin-bottom:11px;display:none;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(15,76,117,.2)">
+      <span style="font-size:18px">📲</span>
+      <span>Instalar app en este dispositivo</span>
+    </button>
+    <div id="appInstaladaMsg" style="display:none;background:var(--vec);border:1.5px solid var(--ve);border-radius:var(--rch);padding:10px;margin-bottom:11px;font-size:12.5px;color:#1e8449;text-align:center;font-weight:600">
+      ✅ La app ya está instalada en este dispositivo
+    </div>
     <p class="mu" style="margin-bottom:9px">Mostrá este código QR para que otros instalen la app en su celular. Funciona escaneando con la cámara.</p>
     <div id="qr-container" style="background:#fff;padding:12px;border-radius:var(--rch);display:flex;justify-content:center;border:1.5px solid var(--brd);margin-bottom:10px"></div>
     <div style="font-family:var(--mo);font-size:11px;color:var(--gm);text-align:center;padding:7px;background:var(--fo);border-radius:6px;word-break:break-all" id="qr-url"></div>
@@ -394,7 +414,7 @@ select.fc{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <button class="btn btnP" style="flex:1" onclick="compartirApp()">📤 Compartir</button>
     </div>
     <p class="mu" style="margin-top:11px;font-size:11px;line-height:1.6">
-      <strong style="color:var(--az)">Para instalar como app:</strong><br>
+      <strong style="color:var(--az)">Instalación manual si no aparece el botón:</strong><br>
       <strong>Android:</strong> Chrome → menú ⋮ → "Instalar app" o "Agregar a pantalla principal"<br>
       <strong>iPhone:</strong> Safari → compartir ⬆️ → "Agregar a pantalla de inicio"
     </p>
@@ -1606,6 +1626,85 @@ function toast(msg,tipo=''){
   clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('vis'),2900);
 }
 
+
+
+/* ── INSTALACIÓN COMO APP (PWA install prompt) ── */
+let promptInstalacion=null;
+
+// Detectar si la app ya está instalada
+function estaInstalada(){
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone===true
+    || document.referrer.includes('android-app://');
+}
+
+// Capturar el evento de instalación disponible
+window.addEventListener('beforeinstallprompt',(e)=>{
+  e.preventDefault();
+  promptInstalacion=e;
+  // Mostrar el banner si el usuario no lo cerró antes
+  const cerrado=localStorage.getItem('yk_banner_cerrado');
+  if(!cerrado&&!estaInstalada()){
+    setTimeout(()=>{
+      const b=document.getElementById('installBanner');
+      if(b) b.style.display='flex';
+    },1500); // Esperar 1.5s para no molestar al abrir
+  }
+  // Mostrar el botón en Config
+  const btnCfg=document.getElementById('btnInstalarConfig');
+  if(btnCfg) btnCfg.style.display='flex';
+});
+
+// Cuando se instala con éxito
+window.addEventListener('appinstalled',()=>{
+  promptInstalacion=null;
+  const b=document.getElementById('installBanner');
+  if(b) b.style.display='none';
+  const btnCfg=document.getElementById('btnInstalarConfig');
+  if(btnCfg) btnCfg.style.display='none';
+  const msg=document.getElementById('appInstaladaMsg');
+  if(msg) msg.style.display='block';
+  toast('✅ App instalada correctamente','ok');
+});
+
+async function instalarApp(){
+  if(!promptInstalacion){
+    // Detectar plataforma para mostrar instrucción correcta
+    const ua=navigator.userAgent.toLowerCase();
+    if(/iphone|ipad|ipod/.test(ua)){
+      toast('📱 iPhone: Tocá compartir ⬆️ y elegí "Agregar a pantalla de inicio"','');
+    } else {
+      toast('📱 Tocá el menú ⋮ del navegador y elegí "Instalar app"','');
+    }
+    return;
+  }
+  try{
+    promptInstalacion.prompt();
+    const resultado=await promptInstalacion.userChoice;
+    if(resultado.outcome==='accepted'){
+      toast('🎉 Instalando…','ok');
+    }
+    promptInstalacion=null;
+    document.getElementById('installBanner').style.display='none';
+  }catch(e){
+    toast('No se pudo abrir el instalador','err');
+  }
+}
+
+function cerrarBannerInstall(){
+  document.getElementById('installBanner').style.display='none';
+  localStorage.setItem('yk_banner_cerrado','1');
+}
+
+// Al cargar, verificar si ya está instalada
+window.addEventListener('load',()=>{
+  if(estaInstalada()){
+    const msg=document.getElementById('appInstaladaMsg');
+    if(msg) msg.style.display='block';
+    const btnCfg=document.getElementById('btnInstalarConfig');
+    if(btnCfg) btnCfg.style.display='none';
+  }
+});
 
 /* ── COMPARTIR / QR ── */
 let qrGenerado=false;
