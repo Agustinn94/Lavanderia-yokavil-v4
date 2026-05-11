@@ -1064,17 +1064,20 @@ async function iniciarVozAcumulando(){
 
 function iniciarVoz(acumular){
   acumulando=acumular;
-  if(!acumular){transcripcion='';}
+  // SIEMPRE limpiar transcripcion al iniciar una nueva grabación.
+  // El "acumular" se maneja a nivel de resultado parseado (vozRes), no del texto crudo.
+  transcripcion='';
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   recObj=new SR();recObj.lang='es-AR';
   recObj.continuous=true;recObj.interimResults=true;recObj.maxAlternatives=1;
   grabando=true;
   document.getElementById('btnVoz').classList.add('grab');
   document.getElementById('vozIco').textContent='⏹️';
-  document.getElementById('vozLbl').textContent='Grabando… tocá para detener';
+  document.getElementById('vozLbl').textContent=acumular?'Grabando prendas extra… tocá para detener':'Grabando… tocá para detener';
   document.getElementById('btn-agregar-mas').style.display='none';
-  vozStatus('esc','🎙️ Grabando. Hablá tranquilo, podés hacer pausas. Tocá para detener cuando termines.');
-  let parcial='';
+  // Limpiar el texto visible del dictado anterior
+  document.getElementById('vozTxt').textContent='';
+  vozStatus('esc',acumular?'🎙️ Grabando prendas adicionales. Solo nombrá las prendas extra (ej: "diez pantalones, dos camisas").':'🎙️ Grabando. Hablá tranquilo, podés hacer pausas. Tocá para detener cuando termines.');
   recObj.onresult=(e)=>{
     let inter='';
     for(let i=e.resultIndex;i<e.results.length;i++){
@@ -1135,11 +1138,16 @@ function procesarVoz(texto,acumular){
     codigo=vozRes.codigo;nombre=vozRes.nombre;apellido=vozRes.apellido;empresa=vozRes.empresa;
   }
 
-  // Extraer parte de prendas (después de "envía" o desde el inicio si es acumulando sólo prendas)
+  // Extraer parte de prendas
   let parteP=tl;
-  const splitEnvia=tl.split(/env[ií]a|envia|manda|entrega/i);
-  if(splitEnvia.length>1)parteP=splitEnvia.slice(1).join(' ');
-  else if(acumular)parteP=tl; // en modo acumular, todo el texto son prendas
+  if(acumular){
+    // En modo acumular, TODO el texto del nuevo dictado son prendas adicionales.
+    // Removemos "envía/manda/entrega" si lo dijeron por costumbre, para no incluirlo en parser.
+    parteP=tl.replace(/^.*?(env[ií]a|envia|manda|entrega)\s*/i,'').trim()||tl;
+  } else {
+    const splitEnvia=tl.split(/env[ií]a|envia|manda|entrega/i);
+    if(splitEnvia.length>1)parteP=splitEnvia.slice(1).join(' ');
+  }
 
   const {prendas,noRec}=parsearPrendas(parteP);
 
@@ -1147,39 +1155,56 @@ function procesarVoz(texto,acumular){
   if(acumular&&vozRes){
     prendas.forEach(nueva=>{
       const ex=vozRes.prendas.find(p=>p.prenda===nueva.prenda);
-      if(ex) ex.cantidad+=nueva.cantidad;  // suma correcta, no reemplaza
+      if(ex) ex.cantidad+=nueva.cantidad;  // suma correcta
       else vozRes.prendas.push(nueva);
     });
     if(noRec&&noRec.length) vozRes.noRec=[...(vozRes.noRec||[]),...noRec];
+    // Guardar también el último texto para mostrar
+    vozRes._ultimoTexto=texto;
+    vozRes._textosCombinados=(vozRes._textosCombinados||[]).concat([texto]);
   } else {
-    vozRes={codigo,nombre,apellido,empresa,prendas,noRec:noRec||[]};
+    vozRes={codigo,nombre,apellido,empresa,prendas,noRec:noRec||[],_ultimoTexto:texto,_textosCombinados:[texto]};
   }
 
   if(!vozRes.prendas.length&&!vozRes.noRec.length){
     vozStatus('err','❌ No se detectaron prendas. Intentá: "envía tres pantalones de trabajo, dos camisas..."');
     return;
   }
-  const total=vozRes.prendas.length+(vozRes.noRec?.length||0);
-  vozStatus('ok',`✅ Procesado. ${vozRes.prendas.length} prenda(s) reconocida(s)${vozRes.noRec?.length?' · '+vozRes.noRec.length+' por confirmar':''}.`);
-  mostrarResVoz(vozRes,texto);
+  const msgPrefijo=acumular?'➕ Agregado al dictado: ':'✅ Procesado: ';
+  const cantTotal=vozRes.prendas.reduce((s,p)=>s+p.cantidad,0);
+  vozStatus('ok',`${msgPrefijo}${vozRes.prendas.length} tipo(s) de prenda · ${cantTotal} unidades en total${vozRes.noRec?.length?' · '+vozRes.noRec.length+' por confirmar':''}.`);
+  mostrarResVoz(vozRes,texto,acumular);
 }
 
 function capitalizar(s){return s.replace(/\b(\w)/g,c=>c.toUpperCase());}
 
-function mostrarResVoz(res,textoOrig){
+function mostrarResVoz(res,textoOrig,acumular){
   const card=document.getElementById('vozCard'),cont=document.getElementById('vozRes');
   card.style.display='block';
-  let h=`<div style="font-size:10.5px;color:var(--gm);margin-bottom:9px;font-style:italic;padding:8px;background:var(--fo);border-radius:6px">"${textoOrig.slice(0,300)}${textoOrig.length>300?'…':''}"</div>`;
+  // Mostrar todos los dictados si hubo más de uno
+  const dictados=res._textosCombinados||[textoOrig];
+  const cantTotal=res.prendas.reduce((s,p)=>s+p.cantidad,0);
+  let h='';
+  if(dictados.length>1){
+    h+=`<div style="font-size:10.5px;color:var(--gm);margin-bottom:9px;padding:8px;background:var(--fo);border-radius:6px">
+      <div style="font-weight:600;color:var(--az);margin-bottom:4px">📢 ${dictados.length} dictados combinados:</div>`;
+    dictados.forEach((d,i)=>{
+      h+=`<div style="font-style:italic;margin-bottom:3px"><strong>${i+1}.</strong> "${d.slice(0,200)}${d.length>200?'…':''}"</div>`;
+    });
+    h+='</div>';
+  } else {
+    h+=`<div style="font-size:10.5px;color:var(--gm);margin-bottom:9px;font-style:italic;padding:8px;background:var(--fo);border-radius:6px">"${textoOrig.slice(0,300)}${textoOrig.length>300?'…':''}"</div>`;
+  }
   h+=`<div class="rmeta" style="margin-bottom:11px">
     <div class="rmi"><div class="rml">Código</div><div class="rmv" style="font-family:var(--mo);color:var(--az)">${res.codigo||'<span style="color:#aab">—</span>'}</div></div>
     <div class="rmi"><div class="rml">Operario</div><div class="rmv">${res.nombre||'—'} ${res.apellido||''}</div></div>
     <div class="rmi"><div class="rml">Empresa</div><div class="rmv">${res.empresa||'<span style="color:#aab">—</span>'}</div></div>
-    <div class="rmi"><div class="rml">Prendas detectadas</div><div class="rmv">${res.prendas.length+(res.noRec?.length||0)}</div></div>
+    <div class="rmi"><div class="rml">Total acumulado</div><div class="rmv" style="font-family:var(--mo);color:var(--az);font-size:14px">${cantTotal} unidades</div></div>
   </div>`;
   if(res.prendas.length){
-    h+=`<div class="voz-ok-sec"><div class="voz-sec-tit" style="color:var(--ve)">✅ Reconocidas automáticamente</div>`;
+    h+=`<div class="voz-ok-sec"><div class="voz-sec-tit" style="color:var(--ve)">✅ Prendas detectadas (suma acumulada)</div>`;
     h+=`<div style="display:flex;flex-wrap:wrap;gap:5px">`;
-    res.prendas.forEach(p=>{h+=`<span class="tag">${p.cantidad}× ${p.prenda}</span>`;});
+    res.prendas.forEach(p=>{h+=`<span class="tag" style="font-size:12px;padding:5px 10px"><strong>${p.cantidad}×</strong> ${p.prenda}</span>`;});
     h+=`</div></div>`;
   }
   if(res.noRec&&res.noRec.length){
